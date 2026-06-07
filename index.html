@@ -1422,9 +1422,10 @@ async function boot(){
   fillPhaseSelects();
   if(CLOUD){
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    sb.auth.onAuthStateChange((_e,session)=>handleSession(session));
+    // Defer out of the auth-lock: never run a Supabase query directly inside onAuthStateChange
+    sb.auth.onAuthStateChange((_e,session)=>{ setTimeout(()=>handleSession(session),0); });
     const {data:{session}}=await sb.auth.getSession();
-    await handleSession(session);
+    setTimeout(()=>handleSession(session),0);
   } else {
     await load(); fillSettings(); render();
   }
