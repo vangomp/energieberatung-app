@@ -836,7 +836,7 @@ function openDetail(id){
     html+=`<div class="entry${flag?' overdue':''}" style="flex-wrap:wrap">
         <span class="badge">${fmtDate(o.date)}</span>
         <b style="flex:1;min-width:120px">${escapeHtml(o.label||"Offer")}${flag?' <span class="overdue-tag">file missing</span>':''}</b>
-        <span class="num">${o.amount?eur(o.amount):""}</span>
+        <span style="display:inline-flex;align-items:center;gap:3px"><span class="muted">€</span><input type="number" min="0" step="50" value="${o.amount||''}" title="Amount € (editable)" onchange="setOfferAmount('${p.id}','${o.id}',this.value)" style="width:84px;padding:4px 7px" class="num"></span>
         <input type="date" value="${o.deadline||''}" title="Hand-over deadline (editable)" onchange="setOfferDeadlineVal('${p.id}','${o.id}',this.value)" style="padding:4px 7px;width:140px;${deadlineOverdue(o)?'color:var(--bad);border-color:#44262a':''}">
         ${o.deadline?'':'<span class="muted" style="font-size:11px">set deadline →</span>'}
         <select onchange="setOfferStatus('${p.id}','${o.id}',this.value)" style="padding:4px 8px">
@@ -1042,6 +1042,10 @@ function setOfferStatus(pid,oid,status){
 function setOfferDeadlineVal(pid,oid,val){
   const p=state.projects.find(x=>x.id===pid); const o=p.offers.find(x=>x.id===oid);
   o.deadline=val; save(); openDetail(pid); render();
+}
+function setOfferAmount(pid,oid,val){
+  const p=state.projects.find(x=>x.id===pid); const o=p.offers.find(x=>x.id===oid);
+  o.amount=parseFloat(val)||0; save(); openDetail(pid); render();
 }
 function toggleOfferDone(pid,oid){
   const p=state.projects.find(x=>x.id===pid); const o=p.offers.find(x=>x.id===oid);
