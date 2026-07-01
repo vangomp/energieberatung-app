@@ -146,9 +146,10 @@
           c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
           btn.onclick = function () {
             btn.disabled = true; status.textContent = 'Plane…'; out.innerHTML = '';
-            Promise.all([api('/eb-plan'), api('/eb-steps')]).then(function (res) {
+            Promise.all([api('/eb-plan'), api('/eb-steps'), api('/eb-nora')]).then(function (res) {
               btn.disabled = false;
               var plan = res[0] || {}, steps = (res[1] && res[1].plans) || [];
+              var st = (res[2] && res[2].settings) || {}; var WS = Number(st.work_start) || 9, WE = Number(st.work_end) || 17;
               var todos = (plan.todos || []).filter(function (t) { return t.status === 'accepted'; });
               todos.sort(function (a, b) { return (Number(b.overdue) - Number(a.overdue)) || (String(a.due || '9999') < String(b.due || '9999') ? -1 : 1); });
               function hoursFor(t) { var ti = (t.title || '').toLowerCase(); var m = steps.find(function (s) { var key = (s.auftrag_type || '').toLowerCase().split(/[ /(]/)[0]; return key && ti.indexOf(key) >= 0; }); return m ? (Number(m.total_hours) || 4) : 4; }
@@ -156,7 +157,7 @@
               var slots = []; var now = new Date();
               for (var d = 0; d < 7; d++) {
                 var day = new Date(now); day.setDate(now.getDate() + d); var wd = day.getDay(); if (wd === 0 || wd === 6) continue;
-                var ws = new Date(day); ws.setHours(9, 0, 0, 0); var we = new Date(day); we.setHours(17, 0, 0, 0); if (d === 0 && now > ws) ws = new Date(now);
+                var ws = new Date(day); ws.setHours(WS, 0, 0, 0); var we = new Date(day); we.setHours(WE, 0, 0, 0); if (d === 0 && now > ws) ws = new Date(now);
                 var db = busy.filter(function (b) { return b.e > ws && b.s < we; }).map(function (b) { return { s: new Date(Math.max(b.s, ws)), e: new Date(Math.min(b.e, we)) }; }).sort(function (a, b) { return a.s - b.s; });
                 var cur = new Date(ws); db.forEach(function (b) { if (b.s > cur) slots.push({ s: new Date(cur), e: new Date(b.s) }); if (b.e > cur) cur = new Date(b.e); }); if (cur < we) slots.push({ s: new Date(cur), e: new Date(we) });
               }
@@ -294,6 +295,20 @@
           send.onclick = function () { var v = ta.value.trim(); if (!v) return; send.disabled = true; msg.textContent = 'Sende…'; api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'add_delegation', body: v }) }).then(function (r) { if (r.ok) { ta.value = ''; msg.textContent = '✓ Nora hat es.'; msg.style.color = 'var(--good)'; load(); } else { msg.textContent = 'Fehler'; } send.disabled = false; }); };
           c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
           load();
+        }));
+
+        body.appendChild(card('Deine Arbeitszeiten', function (c) {
+          c.appendChild(para('Wann arbeitest du normalerweise? Danach plant Nora deine Arbeitspakete — nur in dieser Zeit, nie in deine Termine oder Familienzeit.'));
+          function lbl(t) { var e = h('span', null, t); e.style.cssText = 'color:var(--muted);font-size:14px'; return e; }
+          var row = h('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px';
+          var from = h('input', 'nora-in'); from.type = 'number'; from.min = '0'; from.max = '23'; from.style.width = '70px';
+          var to = h('input', 'nora-in'); to.type = 'number'; to.min = '0'; to.max = '23'; to.style.width = '70px';
+          var rate = h('input', 'nora-in'); rate.type = 'number'; rate.style.width = '120px'; rate.placeholder = '€/h Minimum';
+          var save = h('button', 'nora-sv', 'Speichern'); var msg = h('div', 'nora-m'); msg.style.marginTop = '6px';
+          row.appendChild(lbl('Mo–Fr')); row.appendChild(from); row.appendChild(lbl('–')); row.appendChild(to); row.appendChild(lbl('Uhr')); row.appendChild(rate); row.appendChild(save);
+          c.appendChild(row); c.appendChild(msg);
+          api('/eb-nora').then(function (j) { var s = (j && j.settings) || {}; from.value = s.work_start != null ? s.work_start : 9; to.value = s.work_end != null ? s.work_end : 17; if (s.min_rate != null) rate.value = s.min_rate; });
+          save.onclick = function () { save.disabled = true; api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'save_settings', work_start: Number(from.value) || 9, work_end: Number(to.value) || 17, min_rate: rate.value ? Number(rate.value) : null }) }).then(function () { msg.textContent = '✓ gespeichert — Nora plant jetzt in dieser Zeit.'; msg.style.color = 'var(--good)'; save.disabled = false; }); };
         }));
 
         body.appendChild(card('Dein Kalender-Link (1:1)', function (c) {
