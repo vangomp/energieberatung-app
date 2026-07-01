@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nora – Erinnerungen aktivieren</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:520px;margin:0 auto;padding:48px 22px;color:#1f2a33;background:#f7fafc}
+  h1{color:#2E6C8E;font-size:28px;margin:0 0 6px}
+  p{line-height:1.55;color:#3a4a55;font-size:16px}
+  button{font-size:18px;padding:14px 22px;border:0;border-radius:12px;background:#2E6C8E;color:#fff;font-weight:600;cursor:pointer;margin-top:16px}
+  button:disabled{opacity:.6}
+  #status{margin-top:20px;padding:13px 15px;border-radius:10px;background:#e4eef3;color:#1f2a33;display:none;line-height:1.5}
+  .ok{background:#e6f4ea!important;color:#1e7a44!important}
+  .err{background:#fdecec!important;color:#b23b3b!important}
+</style>
+</head>
+<body>
+  <h1>Nora</h1>
+  <p>Aktiviere die tägliche Erinnerung, damit du morgens deine <b>eine Sache für heute</b> direkt aufs Handy bekommst. Ein Ding, dann abhaken.</p>
+  <button id="go">🔔 Erinnerungen aktivieren</button>
+  <div id="status"></div>
+<script>
+const PUSH_FN = 'https://xytmbhbkridbepeyhfml.supabase.co/functions/v1/immo-push';
+const VAPID_PUBLIC = 'BHC5aOaBsBnVafOCpsdUjFfkUVHtzMefQX_e67wIVPVmjUllv37ZuPTL3u7RamP2TyGqg-cBxrx6qEXBPcsn9x8';
+const st = document.getElementById('status');
+function show(msg, cls){ st.style.display='block'; st.textContent=msg; st.className = cls||''; }
+function urlB64ToUint8(base64){
+  const pad='='.repeat((4 - base64.length % 4) % 4);
+  const b=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b); const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+document.getElementById('go').addEventListener('click', async function(){
+  const btn=this; btn.disabled=true;
+  try{
+    if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+      show('Dieses Gerät unterstützt keine Push-Nachrichten. Bitte im Standard-Browser (Chrome/Safari) öffnen und zum Startbildschirm hinzufügen.','err'); btn.disabled=false; return;
+    }
+    show('Frage nach Erlaubnis…');
+    const perm = await Notification.requestPermission();
+    if(perm!=='granted'){ show('Ohne Erlaubnis geht es leider nicht. Du kannst es in den Browser-Einstellungen wieder erlauben.','err'); btn.disabled=false; return; }
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){ sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlB64ToUint8(VAPID_PUBLIC) }); }
+    const j = sub.toJSON();
+    const r = await fetch(PUSH_FN, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'subscribe', app:'immoday', ua: navigator.userAgent, sub: { endpoint: sub.endpoint, keys: j.keys } }) });
+    const rj = await r.json().catch(()=>({}));
+    if(r.ok && rj.ok){ show('✅ Aktiviert! Du bekommst ab morgen früh deine tägliche Erinnerung. Du kannst dieses Fenster schließen.','ok'); btn.textContent='✓ Aktiviert'; }
+    else { show('Fast geschafft — Anmeldung nicht bestätigt ('+(rj.error||r.status)+'). Bitte nochmal tippen.','err'); btn.disabled=false; }
+  }catch(e){ show('Fehler: '+(e && e.message ? e.message : e),'err'); btn.disabled=false; }
+});
+</script>
+</body>
+</html>
