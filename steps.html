@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nora – Schritt-Pläne</title>
+<style>
+  :root{--acc:#2E6C8E;--ink:#1f2a33;--muted:#5a6b75;--line:#e2e8ed;--bg:#f7fafc}
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+  .wrap{max-width:840px;margin:0 auto;padding:22px 16px 80px}
+  h1{color:var(--acc);font-size:24px;margin:0 0 2px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 20px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+  .chead{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+  .chead input.type{font-size:17px;font-weight:600;color:var(--acc);border:1px solid transparent;border-radius:8px;padding:4px 6px;flex:1;min-width:180px}
+  .chead input.type:focus{border-color:var(--line);outline:none}
+  .total{font-size:13px;color:var(--muted);white-space:nowrap}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:5px 4px;text-align:left;font-size:14px}
+  th{font-size:12px;color:var(--muted);font-weight:600}
+  input.name{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:14px}
+  input.hrs{width:64px;border:1px solid var(--line);border-radius:8px;padding:7px 6px;font-size:14px;text-align:right}
+  select.kind{border:1px solid var(--line);border-radius:8px;padding:7px 6px;font-size:13px;background:#fff}
+  .rm{border:none;background:none;color:#b23b3b;cursor:pointer;font-size:16px;padding:2px 6px}
+  .row-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
+  button.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;font-size:14px;cursor:pointer}
+  button.save{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+  button.add{border-style:dashed;color:var(--acc);width:100%;padding:12px;font-size:15px}
+  .msg{font-size:13px;margin-left:auto}
+  .ok{color:#1e7a44}.err{color:#b23b3b}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Nora – Schritt-Pläne</h1>
+  <p class="sub" id="sub">Lädt… · Zeiten sind Startwerte, passt sie an eure echten an.</p>
+  <div id="list"></div>
+  <button class="btn add" id="addType">+ Neue Auftragsart</button>
+</div>
+<script>
+const FN='https://xytmbhbkridbepeyhfml.supabase.co/functions/v1/eb-steps';
+const t=(new URLSearchParams(location.search)).get('t')||'';
+const list=document.getElementById('list'), sub=document.getElementById('sub');
+function el(tag,cls,txt){ const e=document.createElement(tag); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e; }
+function row(s){
+  const tr=el('tr');
+  const td1=el('td'); const nm=el('input','name'); nm.value=s.name||''; td1.appendChild(nm);
+  const td2=el('td'); const hr=el('input','hrs'); hr.type='number'; hr.step='0.5'; hr.min='0'; hr.value=s.hours!=null?s.hours:0; hr.addEventListener('input',()=>recalc(tr.closest('.card'))); td2.appendChild(hr);
+  const td3=el('td'); const kd=el('select','kind'); ['movable','fix'].forEach(k=>{ const o=el('option',null,k==='movable'?'beweglich':'Termin-fix'); o.value=k; if((s.kind||'movable')===k)o.selected=true; kd.appendChild(o); }); td3.appendChild(kd);
+  const td4=el('td'); const rm=el('button','rm','×'); rm.title='Schritt entfernen'; rm.addEventListener('click',()=>{ const c=tr.closest('.card'); tr.remove(); recalc(c); }); td4.appendChild(rm);
+  tr.append(td1,td2,td3,td4); return tr;
+}
+function recalc(card){ let sum=0; card.querySelectorAll('input.hrs').forEach(h=>sum+=Number(h.value)||0); card.querySelector('.total').textContent=Math.round(sum*10)/10+' h gesamt'; }
+function card(plan){
+  const c=el('div','card'); c.dataset.orig=plan.auftrag_type||'';
+  const head=el('div','chead');
+  const type=el('input','type'); type.value=plan.auftrag_type||''; type.placeholder='Auftragsart (z. B. iSFP)';
+  const total=el('span','total','0 h gesamt');
+  head.append(type,total); c.appendChild(head);
+  const tbl=el('table'); const thead=el('tr'); ['Schritt','Std.','Art',''].forEach(h=>thead.appendChild(el('th',null,h))); const tb=el('tbody');
+  tbl.appendChild(thead); tbl.appendChild(tb); c.appendChild(tbl);
+  (plan.steps||[]).forEach(s=>tb.appendChild(row(s)));
+  const acts=el('div','row-actions');
+  const addStep=el('button','btn','+ Schritt'); addStep.addEventListener('click',()=>{ tb.appendChild(row({name:'',hours:0,kind:'movable'})); recalc(c); });
+  const save=el('button','btn save','Speichern');
+  const del=el('button','btn','Löschen');
+  const msg=el('span','msg');
+  save.addEventListener('click',async()=>{
+    const steps=[...tb.querySelectorAll('tr')].map(tr=>({ name:tr.querySelector('input.name').value.trim(), hours:Number(tr.querySelector('input.hrs').value)||0, kind:tr.querySelector('select.kind').value })).filter(s=>s.name);
+    const at=type.value.trim(); if(!at){ msg.textContent='Name fehlt'; msg.className='msg err'; return; }
+    msg.textContent='Speichere…'; msg.className='msg';
+    try{ const r=await fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t,auftrag_type:at,steps})}); const j=await r.json(); if(j.ok){ msg.textContent='✓ gespeichert ('+j.total_hours+' h)'; msg.className='msg ok'; c.dataset.orig=at; } else { msg.textContent=j.error||'Fehler'; msg.className='msg err'; } }
+    catch(e){ msg.textContent='Fehler'; msg.className='msg err'; }
+  });
+  del.addEventListener('click',async()=>{ const at=c.dataset.orig; if(at){ if(!confirm('Auftragsart „'+at+'“ löschen?'))return; await fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({t,action:'delete',auftrag_type:at})}); } c.remove(); });
+  acts.append(addStep,save,del,msg); c.appendChild(acts);
+  const hint=el('div','hint','„Termin-fix“ = an einen Termin gebunden (z. B. Vor-Ort-Aufnahme) und ankert den Plan. „beweglich“ = frei einplanbar.');
+  c.appendChild(hint);
+  recalc(c); return c;
+}
+async function load(){
+  if(!t){ sub.innerHTML='<span class="err">Kein Zugriffs-Link.</span>'; return; }
+  try{ const r=await fetch(FN+'?t='+encodeURIComponent(t)); const j=await r.json(); if(j.error)throw new Error(j.error);
+    sub.textContent='Zeiten sind Startwerte – passt sie an eure echten Zeiten an. Änderungen mit „Speichern“ sichern.';
+    (j.plans||[]).forEach(p=>list.appendChild(card(p)));
+  }catch(e){ sub.innerHTML='<span class="err">Konnte nicht laden ('+e.message+').</span>'; }
+}
+document.getElementById('addType').addEventListener('click',()=>{ const c=card({auftrag_type:'',steps:[{name:'',hours:0,kind:'movable'}]}); list.appendChild(c); c.scrollIntoView({behavior:'smooth'}); });
+load();
+</script>
+</body>
+</html>
