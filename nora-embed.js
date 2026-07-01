@@ -95,10 +95,19 @@
         else {
           var evs = (j.calendar || []).map(function (e) { return { t: e.title, allDay: e.allDay, s: deDate(e.start) }; }).filter(function (e) { return e.s; }).sort(function (a, b) { return a.s - b.s; });
           if (!evs.length) cc.appendChild(h('div', 'nora-empty', 'Keine Termine.'));
+          function catOf(t) { t = (t || '').toLowerCase();
+            if (/kid|kind|famil|frei|urlaub|privat|geburtstag|schule|kita/.test(t)) return ['Family', '#fbbf24'];
+            if (/fris|arzt|zahn/.test(t)) return ['Privat', '#9aa3b5'];
+            if (/bni|netzwerk|1-2-1|1:1|stammtisch|vortrag|confer|kongress|messe|besicht|kaffee|austausch|treffen|junioren|meeting|staff/.test(t)) return ['Networking', '#4f8cff'];
+            return ['Working', '#34d399'];
+          }
+          var counts = {}; evs.forEach(function (e) { var cx = catOf(e.t)[0]; counts[cx] = (counts[cx] || 0) + 1; });
+          var sm = h('div', 'nora-m'); sm.textContent = 'Networking: ' + (counts.Networking || 0) + ' · Family/Privat: ' + ((counts.Family || 0) + (counts.Privat || 0)) + ' · Working: ' + (counts.Working || 0) + '. Family-Zeit zählt — sie muss in der Arbeitszeit wieder reingeholt werden.'; cc.appendChild(sm);
+          if ((counts.Networking || 0) >= 4) { var warn = h('div', 'nora-m'); warn.style.color = 'var(--accent)'; warn.textContent = 'Viel Networking diese Woche — bei neuen Anfragen lieber deinen 1:1-Link schicken statt einen neuen Termin (Dein System → Kalender-Link).'; cc.appendChild(warn); }
           var g = {}; evs.forEach(function (e) { var k = e.s.toISOString().slice(0, 10); (g[k] = g[k] || []).push(e); });
           Object.keys(g).sort().forEach(function (k) {
             var day = h('div', 'nora-day'); day.appendChild(h('h4', null, dName(new Date(k + 'T00:00:00'))));
-            g[k].forEach(function (e) { var r = h('div', 'nora-ev'); r.appendChild(h('div', 'tm', e.allDay ? 'ganztg.' : fTime(e.s))); r.appendChild(h('div', null, e.t)); day.appendChild(r); });
+            g[k].forEach(function (e) { var r = h('div', 'nora-ev'); r.appendChild(h('div', 'tm', e.allDay ? 'ganztg.' : fTime(e.s))); var nmw = h('div', null, e.t); nmw.style.flex = '1'; var ca = catOf(e.t); var tag = h('span', null, ca[0]); tag.style.cssText = 'font-size:10px;padding:1px 7px;border-radius:20px;align-self:center;color:' + (ca[0] === 'Privat' ? 'var(--text)' : '#fff') + ';background:' + ca[1]; r.appendChild(nmw); r.appendChild(tag); day.appendChild(r); });
             cc.appendChild(day);
           });
         }
@@ -185,29 +194,83 @@
           c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
         }));
 
-        body.appendChild(card('Lohnt sich der Auftrag?', function (c) {
-          c.appendChild(para('Kurz einordnen, bevor du Zeit investierst — damit du dich nicht verzettelst und dich nicht unter Wert verkaufst.'));
+        body.appendChild(card('Leads einordnen & priorisieren', function (c) {
+          function tierColor(t) { return t === 'A' ? 'var(--good)' : (t === 'B' ? 'var(--accent)' : 'var(--muted)'); }
+          function tierBadge(t, big) { var b = h('span'); b.textContent = big ? ('Tier ' + t) : t; b.style.cssText = 'font-weight:700;border-radius:' + (big ? '10px' : '6px') + ';display:inline-flex;align-items:center;justify-content:center;color:' + (t === 'C' ? 'var(--text)' : '#fff') + ';background:' + tierColor(t) + ';' + (big ? 'font-size:19px;padding:6px 16px' : 'font-size:13px;width:24px;height:24px;flex:none'); return b; }
+          c.appendChild(para('Trag eine Anfrage ein und ordne sie ein — so siehst du sofort, was Priorität hat und wo sich deine Zeit wirklich lohnt.'));
           var row = h('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px';
+          var nm = h('input', 'nora-in'); nm.placeholder = 'Name / Kunde'; nm.style.flex = '1'; nm.style.minWidth = '150px';
           var val = h('input', 'nora-in'); val.type = 'number'; val.placeholder = 'Wert €'; val.style.width = '90px';
           var prob = h('select', 'nora-in'); [['3', 'gute Chance'], ['2', 'mittel'], ['1', 'unsicher']].forEach(function (o) { var op = h('option', null, o[1]); op.value = o[0]; prob.appendChild(op); });
           var eff = h('select', 'nora-in'); [['1', 'wenig Aufwand'], ['2', 'mittel'], ['3', 'viel Aufwand']].forEach(function (o) { var op = h('option', null, o[1]); op.value = o[0]; eff.appendChild(op); });
-          var go = h('button', 'nora-gh', 'Einordnen'); var out = h('div', 'nora-m'); out.style.marginTop = '8px';
+          var go = h('button', 'nora-gh', 'Einordnen');
+          row.appendChild(nm); row.appendChild(val); row.appendChild(prob); row.appendChild(eff); row.appendChild(go); c.appendChild(row);
+          var result = h('div'); result.style.cssText = 'display:none;align-items:center;gap:12px;margin-top:12px;padding:12px;border:1px solid var(--border);border-radius:10px';
+          var badgeWrap = h('div'); var btxt = h('div', 'nora-m'); btxt.style.flex = '1'; var save = h('button', 'nora-sv', 'Als Lead merken');
+          result.appendChild(badgeWrap); result.appendChild(btxt); result.appendChild(save); c.appendChild(result);
+          var listBox = h('div'); listBox.style.marginTop = '14px'; c.appendChild(listBox);
+          c.appendChild(para('Sag nie unter deinem Mindest-Stundensatz (inkl. Fahrt) zu — der ist deine Erlaubnis, Nein zu sagen.', true));
+          var curTier = null;
           go.onclick = function () {
-            var v = Number(val.value) || 0, p = Number(prob.value), e = Number(eff.value);
-            var score = (v / 1000) + p - e;
-            var tier = score >= 2.5 ? 'A' : (score >= 1 ? 'B' : 'C');
-            var budget = tier === 'A' ? 'voller Pitch + Anfahrt wert' : (tier === 'B' ? 'Call + Angebot, keine lange Fahrt' : 'eine Mail — sonst loslassen');
-            out.innerHTML = '<b>Tier ' + tier + '</b> · ' + budget;
+            var v = Number(val.value) || 0, p = Number(prob.value), e = Number(eff.value); var score = (v / 1000) + p - e;
+            curTier = score >= 2.5 ? 'A' : (score >= 1 ? 'B' : 'C');
+            badgeWrap.innerHTML = ''; badgeWrap.appendChild(tierBadge(curTier, true));
+            btxt.textContent = curTier === 'A' ? 'Hohe Priorität — voller Pitch + Anfahrt wert' : (curTier === 'B' ? 'Mittel — Call + Angebot, keine lange Fahrt' : 'Niedrig — eine Mail, sonst loslassen');
+            result.style.display = 'flex';
           };
-          row.appendChild(val); row.appendChild(prob); row.appendChild(eff); row.appendChild(go); c.appendChild(row); c.appendChild(out);
-          c.appendChild(para('Und: sag nie unter deinem Mindest-Stundensatz (inkl. Fahrt) zu. Der ist deine Erlaubnis, Nein zu sagen.', true));
-          c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
+          save.onclick = function () {
+            if (!curTier) return; save.disabled = true;
+            api('/eb-leads', { method: 'POST', body: JSON.stringify({ lead_name: nm.value.trim() || '(ohne Name)', value_eur: Number(val.value) || 0, probability: Number(prob.value), effort: Number(eff.value), tier: curTier }) }).then(function () { nm.value = ''; val.value = ''; result.style.display = 'none'; curTier = null; save.disabled = false; loadLeads(); });
+          };
+          function loadLeads() {
+            listBox.innerHTML = '<div class="nora-m">Lädt…</div>';
+            api('/eb-leads').then(function (j) {
+              var leads = (j && j.leads) || []; listBox.innerHTML = '';
+              if (!leads.length) { listBox.appendChild(h('div', 'nora-m', 'Noch keine Leads eingeordnet.')); return; }
+              listBox.appendChild(h('div', 'nora-m', 'Priorisiert (A zuerst):'));
+              leads.forEach(function (l) {
+                var r = h('div'); r.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)';
+                r.appendChild(tierBadge(l.tier, false));
+                var n = h('div', null, l.lead_name || '(ohne Name)'); n.style.cssText = 'flex:1;font-size:14px;color:var(--text)';
+                var m = h('div', 'nora-m'); m.textContent = (l.value_eur ? (l.value_eur + ' €') : '');
+                var del = h('button', null, '×'); del.style.cssText = 'border:none;background:none;color:var(--bad);cursor:pointer;font-size:16px';
+                del.onclick = function () { api('/eb-leads', { method: 'POST', body: JSON.stringify({ action: 'delete', id: l.id }) }).then(loadLeads); };
+                r.appendChild(n); r.appendChild(m); r.appendChild(del); listBox.appendChild(r);
+              });
+            });
+          }
+          loadLeads();
         }));
 
         body.appendChild(card('Angebot & Nachfassen', function (c) {
           c.appendChild(para('Angebot raus in 48 Stunden — fertig-genug heute schlägt perfekt nächste Woche. Dann in Ruhe nachfassen; Nora hilft dir dabei.'));
           [['Tag 0', 'Angebot raus (48h-Redline)'], ['+ Tage', 'freundlich schriftlich nachfassen'], ['danach', 'kurzer Anruf — hier gewinnst du Deals']].forEach(function (s) { var r = h('div', 'nora-step'); r.appendChild(h('b', null, s[0])); r.appendChild(h('div', null, s[1])); c.appendChild(r); });
           c.appendChild(para('Freundlich Nein sagen: „Das ist gerade nicht mein Schwerpunkt — ich empfehle dir gern jemanden.“', true));
+        }));
+
+        body.appendChild(card('Mit Nora sprechen & delegieren', function (c) {
+          c.appendChild(para('Gib Nora etwas ab — sie sammelt es und kümmert sich Schritt für Schritt. Bald kannst du hier richtig mit ihr chatten.'));
+          c.appendChild(para('Kniffliges bespricht Nora mit ANNA; wenn nötig fragt ANNA bei Jarne nach — und lernt daraus fürs nächste Mal. Du musst nichts davon selbst klären.', true));
+          var ta = h('textarea'); ta.className = 'nora-in'; ta.placeholder = 'z. B. „an Müller-Angebot erinnern“ oder „Termin mit Herrn Weiß finden“'; ta.style.cssText = 'width:100%;min-height:64px;margin-top:8px;resize:vertical';
+          var arow = h('div'); arow.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px';
+          var send = h('button', 'nora-sv', 'An Nora geben'); var msg = h('div', 'nora-m');
+          arow.appendChild(send); arow.appendChild(msg); c.appendChild(ta); c.appendChild(arow);
+          var box = h('div'); box.style.marginTop = '12px'; c.appendChild(box);
+          function load() { box.innerHTML = ''; api('/eb-nora').then(function (j) { var ds = (j && j.delegations) || []; if (!ds.length) { box.appendChild(h('div', 'nora-m', 'Noch nichts delegiert.')); return; } box.appendChild(h('div', 'nora-m', 'Bei Nora:')); ds.forEach(function (d) { var r = h('div'); r.style.cssText = 'display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border)'; var t = h('div', null, d.body); t.style.cssText = 'flex:1;font-size:14px;color:var(--text)'; var dn = h('button', 'nora-gh', 'erledigt'); dn.onclick = function () { api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'done_delegation', id: d.id }) }).then(load); }; r.appendChild(t); r.appendChild(dn); box.appendChild(r); }); }); }
+          send.onclick = function () { var v = ta.value.trim(); if (!v) return; send.disabled = true; msg.textContent = 'Sende…'; api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'add_delegation', body: v }) }).then(function (r) { if (r.ok) { ta.value = ''; msg.textContent = '✓ Nora hat es.'; msg.style.color = 'var(--good)'; load(); } else { msg.textContent = 'Fehler'; } send.disabled = false; }); };
+          c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
+          load();
+        }));
+
+        body.appendChild(card('Dein Kalender-Link (1:1)', function (c) {
+          c.appendChild(para('Hinterlege hier deinen Buchungs-/1:1-Link. Ist eine Woche schon voll, schickst du statt einem neuen Termin einfach den Link — so bleibt dein Kalender straff.'));
+          var row = h('div'); row.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px';
+          var inp = h('input', 'nora-in'); inp.placeholder = 'https://cal.com/… oder Calendly-Link'; inp.style.flex = '1'; inp.style.minWidth = '200px';
+          var save = h('button', 'nora-sv', 'Speichern'); var copy = h('button', 'nora-gh', 'Link kopieren'); var msg = h('div', 'nora-m'); msg.style.marginTop = '6px';
+          row.appendChild(inp); row.appendChild(save); row.appendChild(copy); c.appendChild(row); c.appendChild(msg);
+          api('/eb-nora').then(function (j) { if (j && j.settings && j.settings.calendar_link) inp.value = j.settings.calendar_link; });
+          save.onclick = function () { save.disabled = true; api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'save_settings', calendar_link: inp.value.trim() }) }).then(function () { msg.textContent = '✓ gespeichert'; msg.style.color = 'var(--good)'; save.disabled = false; }); };
+          copy.onclick = function () { if (!inp.value.trim()) return; try { navigator.clipboard.writeText(inp.value.trim()); } catch (e) {} msg.textContent = 'Link kopiert — jetzt an den Kontakt schicken.'; msg.style.color = 'var(--muted)'; };
         }));
 
         body.appendChild(card('Schritt für Schritt', function (c) {
