@@ -137,6 +137,40 @@
           c.appendChild(para('Das hier ist ein erster Entwurf, damit du ein Gefühl bekommst, wie es funktionieren wird. Wir gehen es zusammen durch.', true));
         }));
 
+        body.appendChild(card('Woche automatisch planen', function (c) {
+          c.appendChild(para('Wenn du so weit bist: Nora legt deine Arbeitspakete in die freien Lücken zwischen deinen Terminen — das Dringendste zuerst, fixe Termine bleiben unberührt.'));
+          var btn = h('button', 'nora-sv', 'Woche planen'); btn.style.marginTop = '8px';
+          var status = h('div', 'nora-m'); status.style.marginTop = '8px';
+          var out = h('div'); out.style.marginTop = '8px';
+          c.appendChild(btn); c.appendChild(status); c.appendChild(out);
+          c.querySelector('.nora-t').appendChild(h('span', 'nora-proto', 'Prototyp'));
+          btn.onclick = function () {
+            btn.disabled = true; status.textContent = 'Plane…'; out.innerHTML = '';
+            Promise.all([api('/eb-plan'), api('/eb-steps')]).then(function (res) {
+              btn.disabled = false;
+              var plan = res[0] || {}, steps = (res[1] && res[1].plans) || [];
+              var todos = (plan.todos || []).filter(function (t) { return t.status === 'accepted'; });
+              todos.sort(function (a, b) { return (Number(b.overdue) - Number(a.overdue)) || (String(a.due || '9999') < String(b.due || '9999') ? -1 : 1); });
+              function hoursFor(t) { var ti = (t.title || '').toLowerCase(); var m = steps.find(function (s) { var key = (s.auftrag_type || '').toLowerCase().split(/[ /(]/)[0]; return key && ti.indexOf(key) >= 0; }); return m ? (Number(m.total_hours) || 4) : 4; }
+              var busy = (plan.calendar || []).filter(function (e) { return !e.allDay && e.start; }).map(function (e) { return { s: new Date(e.start), e: new Date(e.end || e.start) }; });
+              var slots = []; var now = new Date();
+              for (var d = 0; d < 7; d++) {
+                var day = new Date(now); day.setDate(now.getDate() + d); var wd = day.getDay(); if (wd === 0 || wd === 6) continue;
+                var ws = new Date(day); ws.setHours(9, 0, 0, 0); var we = new Date(day); we.setHours(17, 0, 0, 0); if (d === 0 && now > ws) ws = new Date(now);
+                var db = busy.filter(function (b) { return b.e > ws && b.s < we; }).map(function (b) { return { s: new Date(Math.max(b.s, ws)), e: new Date(Math.min(b.e, we)) }; }).sort(function (a, b) { return a.s - b.s; });
+                var cur = new Date(ws); db.forEach(function (b) { if (b.s > cur) slots.push({ s: new Date(cur), e: new Date(b.s) }); if (b.e > cur) cur = new Date(b.e); }); if (cur < we) slots.push({ s: new Date(cur), e: new Date(we) });
+              }
+              slots = slots.filter(function (s) { return (s.e - s.s) / 3600000 >= 0.75; });
+              var blocks = []; var si = 0;
+              todos.forEach(function (t) { var need = hoursFor(t); var guard = 0; while (need > 0.4 && si < slots.length && guard++ < 60) { var slot = slots[si]; var avail = (slot.e - slot.s) / 3600000; if (avail < 0.75) { si++; continue; } var chunk = Math.min(need, avail, 2.5); var be = new Date(slot.s.getTime() + chunk * 3600000); blocks.push({ title: t.title, s: new Date(slot.s), e: be }); slot.s = new Date(be); need -= chunk; if ((slot.e - slot.s) / 3600000 < 0.5) si++; } });
+              if (!blocks.length) { status.textContent = ''; out.appendChild(h('div', 'nora-m', 'Keine offenen Arbeitspakete oder kein freier Slot gefunden.')); return; }
+              status.textContent = 'Vorschlag – so könnte deine Woche aussehen. Fixe Termine bleiben, die Arbeit legt sich dazwischen.';
+              var g = {}; blocks.forEach(function (b) { var k = b.s.toISOString().slice(0, 10); (g[k] = g[k] || []).push(b); });
+              Object.keys(g).sort().forEach(function (k) { var dd = h('div', 'nora-day'); dd.appendChild(h('h4', null, dName(new Date(k + 'T00:00:00')))); g[k].forEach(function (b) { var r = h('div', 'nora-ev'); r.appendChild(h('div', 'tm', fTime(b.s) + '–' + fTime(b.e))); r.appendChild(h('div', null, b.title)); dd.appendChild(r); }); out.appendChild(dd); });
+            }).catch(function () { btn.disabled = false; status.textContent = 'Konnte nicht planen.'; });
+          };
+        }));
+
         body.appendChild(card('Wenn es zu viel wird', function (c) {
           c.appendChild(para('Ein Klick — und Jarne weiß Bescheid. Früh melden ist Stärke, nicht Schwäche.'));
           var btn = h('button', 'nora-sv', 'Ich hänge fest → Jarne Bescheid geben'); btn.style.width = '100%'; btn.style.marginTop = '10px';
