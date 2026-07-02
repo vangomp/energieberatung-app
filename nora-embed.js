@@ -80,10 +80,13 @@
         var ca = h('div', 'nora-card'); ca.appendChild(h('div', 'nora-t', 'Aufgaben (' + todos.length + ' offen)'));
         todos.forEach(function (x, i) {
           var d = h('div'); d.style.padding = '10px 0'; d.style.borderTop = i ? '1px solid var(--border)' : 'none';
-          var ti = h('div', 'nora-t'); ti.textContent = x.title;
+          var head = h('div'); head.style.cssText = 'display:flex;align-items:center;gap:8px';
+          var ti = h('div', 'nora-t'); ti.style.flex = '1'; ti.textContent = x.title;
           if (i === 0) ti.appendChild(h('span', 'nora-pill nora-top', 'Jetzt dran'));
           if (x.overdue) ti.appendChild(h('span', 'nora-pill nora-over', 'überfällig'));
-          d.appendChild(ti);
+          var fb = h('button', null, '✓ fertig'); fb.style.cssText = 'border:1px solid var(--good);background:transparent;color:var(--good);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;flex:none';
+          fb.onclick = function () { fb.disabled = true; fb.textContent = '…'; api('/eb-nora', { method: 'POST', body: JSON.stringify({ action: 'mark_offer', deliverable_key: x.key, status: 'bill_written' }) }).then(function () { try { if (typeof window.load === 'function') window.load(); if (typeof window.render === 'function') window.render(); } catch (e) {} renderPlan(body); }); };
+          head.appendChild(ti); head.appendChild(fb); d.appendChild(head);
           d.appendChild(h('div', 'nora-m', x.project || ''));
           var slip = (x.slippage && x.slippage > 0) ? ' · ' + x.slippage + ' Tage über Zusage' : '';
           d.appendChild(h('div', 'nora-m', 'Frist ' + fDate(deDate(x.due)) + (x.amount ? (' · ' + x.amount + ' €') : '') + slip));
