@@ -137,6 +137,37 @@
           c.appendChild(para('Das hier ist ein erster Entwurf, damit du ein Gefühl bekommst, wie es funktionieren wird. Wir gehen es zusammen durch.', true));
         }));
 
+        body.appendChild(card('Zeit erfassen', function (c) {
+          c.appendChild(para('Tippe Start, wenn du an etwas arbeitest — Stopp, wenn du fertig bist. Nora zählt automatisch mit, du musst nichts notieren.'));
+          var lbl = h('input', 'nora-in'); lbl.placeholder = 'Woran arbeitest du? (z. B. Fensterförderung)'; lbl.style.cssText = 'width:100%;margin-top:8px';
+          var big = h('button', 'nora-sv'); big.style.cssText = 'width:100%;margin-top:10px;font-size:18px;padding:16px';
+          var info = h('div', 'nora-m'); info.style.marginTop = '8px';
+          c.appendChild(lbl); c.appendChild(big); c.appendChild(info);
+          var running = null, tick = null;
+          function fmt(sec) { var m = Math.floor(sec / 60), s = sec % 60; return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s; }
+          function fmtMin(min) { var hh = Math.floor(min / 60), mm = min % 60; return hh ? (hh + ' h ' + mm + ' m') : (mm + ' m'); }
+          function paint() { if (!document.body.contains(big)) { clearInterval(tick); return; } if (running) { big.textContent = '⏸ Stopp'; big.style.background = 'var(--bad)'; var sec = Math.floor((Date.now() - new Date(running.started_at).getTime()) / 1000); info.textContent = 'Läuft: ' + (running.project_name || 'Arbeit') + ' · ' + fmt(sec); lbl.style.display = 'none'; } else { big.textContent = '▶ Start'; big.style.background = 'var(--good)'; lbl.style.display = ''; } }
+          function refresh() { api('/eb-time').then(function (j) { running = (j && j.running) || null; var td = (j && j.today_minutes) || 0; paint(); if (!running) info.textContent = 'Heute erfasst: ' + fmtMin(td); clearInterval(tick); if (running) tick = setInterval(paint, 1000); }); }
+          big.onclick = function () { big.disabled = true; if (running) { api('/eb-time', { method: 'POST', body: JSON.stringify({ action: 'stop' }) }).then(function () { big.disabled = false; refresh(); }); } else { api('/eb-time', { method: 'POST', body: JSON.stringify({ action: 'start', project_name: lbl.value.trim() || 'Arbeit', label: lbl.value.trim() }) }).then(function () { big.disabled = false; refresh(); }); } };
+          refresh();
+        }));
+
+        body.appendChild(card('Fertig & Geld', function (c) {
+          c.appendChild(para('Was du geschafft hast — und was noch aufs Konto muss. Zahlungen verfolgt Nora für dich (über Valerie/Qonto), du musst nichts nachhalten.'));
+          var box = h('div'); c.appendChild(box); box.innerHTML = '<div class="nora-m">Lädt…</div>';
+          api('/eb-plan').then(function (j) {
+            box.innerHTML = '';
+            var done = (j && j.done) || [], open = (j && j.todos) || [];
+            var bill = done.filter(function (d) { return d.status === 'bill_written'; }); var paid = done.filter(function (d) { return d.status === 'paid'; });
+            var sum = function (a) { return a.reduce(function (s, d) { return s + (Number(d.amount) || 0); }, 0); };
+            function line(txt, val, col) { var r = h('div'); r.style.cssText = 'display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid var(--border)'; r.appendChild(h('div', null, txt)); var v = h('div'); v.style.color = col || 'var(--muted)'; v.textContent = val; r.appendChild(v); return r; }
+            box.appendChild(line('In Arbeit', open.length + ' Aufträge'));
+            box.appendChild(line('Rechnung raus — wartet auf Zahlung', bill.length + ' · ' + sum(bill) + ' €', 'var(--accent)'));
+            box.appendChild(line('Bezahlt ✓', paid.length + ' · ' + sum(paid) + ' €', 'var(--good)'));
+            if (paid.length) box.appendChild(h('div', 'nora-m', 'Zuletzt fertig & bezahlt: ' + paid.slice(0, 4).map(function (d) { return d.title; }).join(', ')));
+          }).catch(function () { box.innerHTML = '<div class="nora-empty">Konnte nicht laden.</div>'; });
+        }));
+
         body.appendChild(card('Woche automatisch planen', function (c) {
           c.appendChild(para('Wenn du so weit bist: Nora legt deine Arbeitspakete in die freien Lücken zwischen deinen Terminen — das Dringendste zuerst, fixe Termine bleiben unberührt.'));
           var btn = h('button', 'nora-sv', 'Woche planen'); btn.style.marginTop = '8px';
