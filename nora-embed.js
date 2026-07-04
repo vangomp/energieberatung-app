@@ -75,6 +75,17 @@
       api('/eb-plan').then(function (j) {
         if (j.error) { body.innerHTML = '<div class="nora-empty">' + (j.error === 'unauthorized' ? 'Bitte mit dem JJ-Google-Konto anmelden.' : 'Fehler: ' + j.error) + '</div>'; return; }
         body.innerHTML = '';
+        var today = new Date(); today.setHours(0, 0, 0, 0);
+        var tds = j.todos || [];
+        var rc = h('div', 'nora-card'); rc.appendChild(h('div', 'nora-t', 'Wo muss ich ran?'));
+        var ovd = tds.filter(function (t) { return t.overdue; });
+        var soon = tds.filter(function (t) { if (t.overdue || !t.due) return false; var dd = (new Date(t.due) - today) / 86400000; return dd >= 0 && dd <= 3; });
+        var sumA = function (a) { return a.reduce(function (s, d) { return s + (Number(d.amount) || 0); }, 0); };
+        function rl(txt, val, col) { var r = h('div'); r.style.cssText = 'display:flex;justify-content:space-between;padding:7px 0;border-top:1px solid var(--border)'; r.appendChild(h('div', null, txt)); var v = h('div'); v.style.color = col || 'var(--muted)'; v.textContent = val; r.appendChild(v); return r; }
+        rc.appendChild(rl('Über Deadline', ovd.length + ' · ' + sumA(ovd) + ' €', 'var(--bad)'));
+        rc.appendChild(rl('Bald fällig (in ≤ 3 Tagen)', soon.length + ' Aufträge', 'var(--accent)'));
+        rc.appendChild(h('div', 'nora-m', 'Wo du zu viel/zu wenig Zeit reinsteckst oder vorgearbeitet hast, zeige ich hier — sobald du Aufträge mit dem Timer erfasst.'));
+        body.appendChild(rc);
         var cols = h('div', 'nora-cols');
         var todos = j.todos || [];
         var ca = h('div', 'nora-card'); ca.appendChild(h('div', 'nora-t', 'Aufgaben (' + todos.length + ' offen)'));
