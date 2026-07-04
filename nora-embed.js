@@ -438,6 +438,46 @@
       });
       tabs.forEach(function (t) { btns[t[0]].addEventListener('click', function () { sub(t[0]); }); });
       nav.querySelectorAll('button').forEach(function (b) { if (b !== btn) b.addEventListener('click', function () { sec.classList.remove('active'); btn.classList.remove('active'); }); });
+
+      function enhanceDashboard() {
+        try {
+          var dash = document.getElementById('view-dashboard'); if (!dash) return;
+          var grid = null;
+          [].slice.call(dash.querySelectorAll('div')).forEach(function (e) { if (!grid && e.children.length === 6 && /projects/i.test(e.textContent || '') && /expected revenue/i.test(e.textContent || '')) grid = e; });
+          if (grid) [].slice.call(grid.children).forEach(function (card) { var t = (card.textContent || '').toLowerCase(); if (/expected revenue|bills out|expected this month|offers out/.test(t)) card.style.display = 'none'; });
+          if (!document.getElementById('noraRealityDash')) {
+            var rcd = document.createElement('div'); rcd.id = 'noraRealityDash';
+            rcd.style.cssText = 'background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:0 0 14px';
+            rcd.innerHTML = '<div style="font-weight:600;color:var(--text);margin-bottom:6px">Wo muss ich ran?</div><div class="nrl" style="color:var(--muted);font-size:14px">Lädt…</div>';
+            dash.insertBefore(rcd, dash.firstChild);
+            api('/eb-plan').then(function (j) {
+              var t = (j && j.todos) || []; var tod = new Date(); tod.setHours(0, 0, 0, 0);
+              var ov = t.filter(function (x) { return x.overdue; });
+              var so = t.filter(function (x) { if (x.overdue || !x.due) return false; var d = (new Date(x.due) - tod) / 864e5; return d >= 0 && d <= 3; });
+              var s = function (a) { return a.reduce(function (q, d) { return q + (Number(d.amount) || 0); }, 0); };
+              var el = rcd.querySelector('.nrl'); if (el) el.innerHTML = '<b style="color:var(--bad)">' + ov.length + ' über Deadline · ' + s(ov) + ' €</b> &nbsp;·&nbsp; <span style="color:var(--accent)">' + so.length + ' bald fällig (≤3 T.)</span> &nbsp;·&nbsp; <span style="color:var(--muted)">Über-/Unterzeit sobald der Timer läuft</span>';
+            });
+          }
+        } catch (e) {}
+      }
+      function enhanceTimeline() {
+        try {
+          var tl = document.getElementById('view-timeline'); if (!tl || document.getElementById('noraLegendTop')) return;
+          var cands = [].slice.call(tl.querySelectorAll('*')).filter(function (e) {
+            var t = (e.textContent || '').toLowerCase();
+            if (e.children.length < 2 || e.children.length > 12 || t.length > 220) return false;
+            if (/stra(ß|ss)e|\d{4,}/.test(t)) return false;
+            var hits = ['start', 'first call', 'erstkontakt', 'deadline', 'event', 'termin', 'angebot', 'milestone'].filter(function (k) { return t.indexOf(k) >= 0; });
+            return hits.length >= 2;
+          });
+          var legend = cands[cands.length - 1];
+          if (legend) { var c = legend.cloneNode(true); c.id = 'noraLegendTop'; c.style.cssText = 'position:sticky;top:0;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin:0 0 12px;z-index:5;font-size:12px'; tl.insertBefore(c, tl.firstChild); }
+        } catch (e) {}
+      }
+      function enhanceAll() { enhanceDashboard(); enhanceTimeline(); }
+      nav.querySelectorAll('button').forEach(function (b) { var t = (b.textContent || '').trim().toLowerCase(); if (t === 'dashboard' || t === 'timeline') b.addEventListener('click', function () { setTimeout(enhanceAll, 120); setTimeout(enhanceAll, 500); }); });
+      try { var vd = document.getElementById('view-dashboard'); if (vd) { var mo = new MutationObserver(function () { if (vd.classList.contains('active') && !document.getElementById('noraRealityDash')) enhanceDashboard(); }); mo.observe(vd, { childList: true, subtree: true }); } } catch (e) {}
+      setTimeout(enhanceAll, 400);
     }
 
     var tries = 0;
